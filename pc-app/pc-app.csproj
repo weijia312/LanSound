@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- WinUI 3 (Windows App SDK) 要求带 Windows SDK 版本的 TFM；19041 覆盖面最广 -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>pc_app</RootNamespace>
+    <AssemblyName>LanSound</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\LanSound.ico</ApplicationIcon>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- WinUI 3 -->
+    <UseWinUI>true</UseWinUI>
+    <!-- 非打包（unpackaged）应用：直接双击 exe 运行，无需 MSIX 安装和证书 -->
+    <WindowsPackageType>None</WindowsPackageType>
+
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+
+    <!-- 版本与产品信息：显示在 exe 右键属性 / 任务管理器里。
+         用户报问题时靠它确认版本，缺了就只能猜。 -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>澜声 LanSound</Product>
+    <AssemblyTitle>澜声 LanSound</AssemblyTitle>
+    <Description>把电脑正在播放的声音低延迟传到手机，用手机当无线音箱。局域网内直连，不经云端。</Description>
+    <Company>LanSound</Company>
+    <Copyright>Copyright © 2026 LanSound</Copyright>
+
+    <!-- 默认框架依赖：体积小，依赖机器上的 Windows App Runtime。
+         分发时可在命令行加 -p:WindowsAppSDKSelfContained=true 打成自包含（免装运行时）。 -->
+    <WindowsAppSDKSelfContained Condition="'$(WindowsAppSDKSelfContained)' == ''">false</WindowsAppSDKSelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 运行时用 AppWindow.SetIcon 设置窗口图标，需随输出复制 -->
+    <Content Include="Assets\LanSound.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+
+</Project>

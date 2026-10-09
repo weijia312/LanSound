@@ -1,0 +1,9 @@
+# 构建产物
+bin/
+obj/
+*.user
+*.suo
+
+# 发布输出
+publish/
+dist/
