@@ -138,6 +138,7 @@ powershell -File tools\pack.ps1 -Rid win-arm64     # ARM64
 
 如果确实想连这些一起换（会让所有手机需要重新信任证书），改完记得清掉
 `%AppData%\LanMic` 并让手机重新扫码 + 重新导入根证书。
+
 ### 音频档位：低延迟 / 高音质
 
 两档的**码流完全一样**（48kHz 立体声无损 PCM，20ms 一帧），差别只在"延迟 vs 抗抖动"的取舍：
@@ -158,6 +159,7 @@ powershell -File tools\pack.ps1 -Rid win-arm64     # ARM64
 
 > 抖动缓冲不是越小越好：它要吃掉的正是网络抖动与音频时钟漂移。低延迟档在 WiFi 不稳时更容易出现断续，
 > 这是取舍而非缺陷；网络环境差就切回高音质。
+
 ### 中英适配：跟随系统语言，无手动选项
 
 PC 端与手机端**各自读自己的环境**，都不提供语言选项：
@@ -182,6 +184,7 @@ ToolTip 和无障碍名（`AutomationProperties.Name`）同样走 `Strings` —�
 
 验证用（不对外暴露）：设 `LANSOUND_LANG_OVERRIDE=zh|en` 强制语言，
 `LANSOUND_LANG_DEBUG=1` 打印判定过程。
+
 ### 开机自启
 
 设置卡里的「开机自动启动」复选框，勾选后写当前用户的注册表 Run 项：
@@ -205,6 +208,7 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Run
 
 实测（用真实 `AutoStart` 代码跑一遍开→查→关）：注册表写入正确、`IsEnabled` 状态一致、
 关闭后无残留。
+
 ### 自定义端口
 
 界面上「应用」按钮左边的输入框可改**服务端口**（默认 7443）：
@@ -235,15 +239,6 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Run
 
 ## 自测工具（`../tools/`）
 
-改动音频链路后**至少跑一遍**「判据」那一组 —— 这几个是能真正证伪的，
-不像"能出声"那样收 3 帧和收 1500 帧都算通过。
-
-### 判据类（有明确 PASS/FAIL）
-
-| 工具 | 用途 | 怎么跑 |
-|---|---|---|
-| `probe-stereo` | 三项：样本守恒（斜坡逐样本比对）/ 出帧总量 / 立体声零串扰 | `dotnet run --project tools/probe-stereo -c Release` |
-| `probe-pitch` | 非 48kHz 设备是否被正确重采样（音调是否偏移） | `dotnet run --project tools/probe-pitch -c Release` |
 
 ### 端到端联调类（需要应用正在运行）
 
@@ -256,24 +251,16 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Run
 | `mock-phone.js` | 模拟手机端完整走一遍握手 + 收音开关，做整体回归 |
 
 > 上面几个 node 脚本**默认连 `wss`（真实路径）**，设 `PLAIN=1` 才走明文（配合 `LANMIC_NO_HTTPS=1`）。
-> **关于判据设计的一条教训**：早期版本的 `probe-stereo` 用 `Thread.Sleep(10)` 模拟
+>
+> **关于判据设计的一条教训**：早期写的音频判据用 `Thread.Sleep(10)` 模拟
 > `DataAvailable` 的实时节奏，并断言"出帧间隔不得超过 45ms"。这在负载高的机器上必然误报 ——
 > Windows 定时器精度约 15ms，`Sleep(10)` 超时到 100ms+ 很常见，于是把**喂数抖动**
 > 当成了**出帧抖动**。同样地，`frame-timing.js` 一度把"成簇到达"（中位 0ms、p90 60ms）
 > 判为抖动大，而帧本来就是发送线程一次调度发多帧。
 >
-> 现在两个工具的判据都是**与实时调度无关**的量：样本守恒、出帧总量、平均间隔 ≈ 帧时长。
+> 现在判据都是**与实时调度无关**的量：样本守恒、出帧总量、平均间隔 ≈ 帧时长。
 > 写音频判据时要记住：**别把系统调度噪声算到被测代码头上**。
 
-
-### 诊断类（排查具体故障时用）
-
-| 工具 | 用途 |
-|---|---|
-| `probe-loopback` | 独立跑一次 WASAPI 环回采集，区分"采集没起来"和"起来了但没数据" |
-| `probe-formats` | 枚举所有播放设备，打印 `MixFormat` 与 `capture.WaveFormat` 的真实取值 |
-| `probe-switch` | `list` 列出播放设备；`set <序号>` 程序化切换默认设备（走 `IPolicyConfig` COM） |
-| `probe-resample` | 重采样质量：时长守恒 / 音调保持 / 幅度无损 |
 
 ### 辅助脚本
 
@@ -334,9 +321,10 @@ capture.WaveFormat           : 48000Hz 2ch IeeeFloat          ← 应该校验�
 
 重挂有 1.5 秒节流（设备切换瞬间系统会连发多条通知），并清空组帧缓冲避免新旧音频拼成一帧。
 
-> 排查这类"静默失效"时，`tools/probe-loopback` 很有用：它独立启动一次 WASAPI 环回采集，
-> 直接打印默认设备、`MixFormat`、`capture.WaveFormat` 和实际回调字节数，
-> 能一眼区分"采集没起来"和"起来了但没数据"。
+> 排查这类"静默失效"时，值得独立跑一次 WASAPI 环回采集，直接打印默认设备、
+> `MixFormat`、`capture.WaveFormat` 和实际回调字节数 ——
+> 能一眼区分"采集没起来"（回调一次都不触发）和"起来了但没数据"（回调有、字节数为 0）。
+
 ### 4. 采集硬性要求 48kHz：44.1kHz 的设备直接没声
 
 原代码校验采集格式时要求**采样率必须是 48kHz**，不满足就 `return false` 放弃采集。
@@ -351,7 +339,7 @@ capture.WaveFormat           : 48000Hz 2ch IeeeFloat          ← 应该校验�
 > `source.WaveFormat.SampleRate` 来决定是否需要重采样的，而输入环形缓冲最初把它写死成 48000。
 > 于是 44.1kHz 的设备被当成 48kHz **直通、根本不重采样**，音调整体偏高约 8.8%。
 > 修法是让 `FloatRingBuffer.WaveFormat` 可写，在 `InitPipeline()` 里用设备真实采样率覆盖。
-> 验证判据见 `tools/probe-pitch`（同一份 44.1kHz 数据，只改声明值即可复现 0% 与 +8.8% 的差别）。
+> 验证方法：同一份 44.1kHz 数据，只改声明值即可复现 0% 与 +8.8% 的差别。
 
 ### 5. 重采样器的数据源必须长期可读（这一条最隐蔽）
 
@@ -373,6 +361,7 @@ _resampler ??= new WdlResamplingSampleProvider(new MonoFromCapture(input, ch), S
 > 1. 给 `ISampleProvider` 写实现时，`Read` **必须推进读取位置**并最终返回 0。
 >    既不推进位置（永不结束）也不维护位置（只出一次），两种都会坏事。
 > 2. 这类"静默失效"光看日志没用，要直接打点关键计数器（出帧累计数）才能定位。
+
 ### 6. 重采样绝不能降混成单声道（一次真实的音质事故）
 
 为了让重采样器实现简单，加 44.1kHz 兜底时把 N 声道**求和成单声道**、
@@ -387,7 +376,7 @@ _resampler ??= new WdlResamplingSampleProvider(new MonoFromCapture(input, ch), S
 声道数适配（单声道复制、>2 声道取前两路）放在写入环形缓冲之前做，
 **任何情况下都不做左右求和**。
 
-验证用 `tools/probe-stereo`：喂 L=1kHz / R=3kHz，输出
+验证方法：喂 L=1kHz / R=3kHz，输出应在左右声道各自独立可辨（零串扰）。
 
 ```
 左声道: 1000Hz=0.2500   3000Hz=0.0000
@@ -398,6 +387,7 @@ _resampler ??= new WdlResamplingSampleProvider(new MonoFromCapture(input, ch), S
 
 > 教训：**"能出声"和"音质正确"是两件事**。自动化自测只覆盖了前者，
 > 立体声/相位/动态这类指标必须有专门的判据，否则静默退化无人察觉。
+
 ### 7. 组帧缓冲不能用 List + RemoveRange（会造成断续）
 
 修立体声时我把出帧前的中转缓冲写成了 `List<float>` + `RemoveRange(0, 1920)`。
@@ -413,7 +403,7 @@ _resampler ??= new WdlResamplingSampleProvider(new MonoFromCapture(input, ch), S
 并且左右各一个（`_inputL/_inputR` 供重采样，`_readyL/_readyR` 存结果），
 两个声道的可用帧数取小值后出帧。
 
-三项判据（`tools/probe-stereo` + 真实应用实测）：
+验证方法：喂 L=1kHz / R=3kHz，输出应在左右声道各自独立可辨（零串扰）。
 
 | 检查 | 结果 |
 |---|---|
@@ -424,6 +414,7 @@ _resampler ??= new WdlResamplingSampleProvider(new MonoFromCapture(input, ch), S
 > 教训：**音频流水线里任何 O(n) 的搬移都可能是致命的**。
 > 20ms 一帧、每秒 50 帧，只要单帧处理时间超过 20ms 就会开始掉数据。
 > 环形缓冲是这类场景的正确数据结构，不是"优化"，是基本要求。
+
 ### 8. 界面读不到配置：Load 的时机错了
 
 `OnLaunched` 里原本是「先 `new MainWindow()` → 之后才 `AppConfig.Load()`」。
@@ -443,6 +434,7 @@ _resampler ??= new WdlResamplingSampleProvider(new MonoFromCapture(input, ch), S
 且只在 `app.log` 里留一行不易察觉的记录。
 
 修法：读取时先剥掉 BOM 与首尾空白（`StripBom`）；写入时显式用不带 BOM 的 UTF-8。
+
 ### 10. 手机端"关麦"不能 disable 轨（已随收录功能移除）
 
 历史问题，记录备查：iOS 上 `track.enabled = false` 会挂起整个音频会话、连带下行也断。
@@ -556,3 +548,39 @@ var needed = el.scrollWidth;   // ← 恒等于 clientWidth
 > 2. 这处被 `@media (max-width:480px)`、`@media (max-height:620px)`、
 >    两者组合共三条规则按源码顺序覆盖，**只改基础规则不生效**；
 >    改成单一 `--cap-btn` 变量后，各档位只覆盖一个值，不再互相打架。
+
+### 16. 每次连接开头约 1 秒失真（音频管线没预热）
+
+用户反馈："每次连接声音都会那么 1s 失真。"
+
+三个因素叠在一起，单独看每一个都不像问题：
+
+1. **播放出口是 `MediaStreamDestination` → `<audio>` 元素**（为了锁屏/后台继续出声，
+   见 `ensureAudioCtx`）。AudioContext **只**连 MediaStreamDestination 时，
+   因为没有连扬声器，图的输出不被消费 —— `currentTime` 不推进，也没有静音"垫着"。
+2. `<audio>` 播放 MediaStream 要经过**协商 + 缓冲**才出声，这是异步的。
+3. 而 PCM 帧在握手后约 **100ms** 就开始到（实测日志：`手机已连接` → `已开始采集` 相隔 116ms），
+   比音频元素就绪早得多 —— 头几十帧落在了它还没稳定的窗口里。
+
+日志实测（`app.log`）：
+
+```
+[09:49:34.484] 手机已连接
+[09:49:34.490] 检测到音频设备变化（启动采集），重新挂载采集
+[09:49:34.493] 握手成功：MockPhone
+[09:49:34.600] 已开始采集系统声音：耳机 (EarPods)（48000Hz 2ch → 48kHz 立体声下行）
+```
+
+修法三件事：
+
+| 改动 | 作用 |
+|---|---|
+| 新增 `warmUpAudio()`，在**用户点击手势里**（`startBtn` / `setSpeaker(true)`）调用 | 用 `createConstantSource()` 接一个恒 0 的源到 `audioCtx.destination`，让 `currentTime` 立刻推进、元素一开始播的就是这段静音；等真 PCM 接上来时它已经稳定 |
+| 新增 `resyncPlayback()`，在 `hello` 握手与下行重开时调用 | 清掉上一轮遗留的 `nextPlayTime`。不清的话新会话第一帧会接在上一轮的播放位置上，与元素的当前播放位置错开 |
+| `startupFadePending` 标志 + 首帧 0.12 秒线性淡入 | 兜底遮蔽残余过渡。与其让它以咔哒/失真出现，不如淡进来 —— 听感上就只是"开始了" |
+
+> 关键是**预热必须早于第一帧**。`warmUpAudio()` 放在 `connect()` 之前、
+> 且在用户点击的调用栈里 —— 后者很重要：不在手势里调用，`bgAudio.play()` 会被浏览器拦。
+
+> 说明：这个修复**只在本机验证了语法与协议链路**（`mock-phone.js` 走通、帧格式正确）。
+> Web Audio 的实际出声行为**必须在真机浏览器里验证** —— 我没有 Android 设备。

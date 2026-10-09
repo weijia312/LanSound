@@ -167,9 +167,13 @@
     var wsConnected = false;
     var connecting = false;
     var speakerOn = false;
-    var audioCtx = null, gainNode = null, streamDest = null;
+    var audioCtx = null, gainNode = null, streamDest = null, keepAlive = null;
     var mediaElementOutput = false;
     var nextPlayTime = 0;
+    // 启动遮蔽：PCM 刚开始排程时做一次短淡入。
+    // 原因见 warmUpAudio()：<audio> 播放 MediaStream 需要一段协商/缓冲时间，
+    // 这期间排进去的帧出来是失真的 —— 实测用户听到"每次连接有 1 秒失真"。
+    var startupFadePending = false;
     var volume = 0.8;
     var deviceName = '';
     var lastRxAt = Date.now();
@@ -378,6 +382,50 @@
         }
     }
 
+    // 预热音频管线：必须在**第一帧到达之前**调用（在用户点击的手势里调，播放才不会被拦）。
+    //
+    // 要解决的是一个启动期结构性缺陷，三件事叠在一起：
+    //   1. 走的是 MediaStreamDestination → <audio> 这条路（为了锁屏播放）。
+    //      AudioContext 只连 MediaStreamDestination 时，因为没有连扬声器，
+    //      图的输出不被消费 —— currentTime 不推进、也没有静音"垫着"。
+    //   2. <audio> 播 MediaStream 要经过协商 + 缓冲才出声，这是**异步**的；
+    //      而 PCM 帧在握手后 ~100ms 就开始到，比它早就开始排程了。
+    //   3. 结果是头几十帧落在音频元素还没稳定的窗口里 —— 听感就是开头约 1 秒失真。
+    //
+    // 修法：用一个恒定 0 的源持续连到扬声器，让 (a) currentTime 立刻开始推进，
+    // (b) 元素一开始播放的就是这段静音，等真正的 PCM 接上来时它已经稳定。
+    // 它是 0 信号，直接听不见，也不进 MediaStream，锁屏播放不受影响。
+    function warmUpAudio() {
+        ensureAudioCtx();
+        if (!audioCtx) return;
+        if (!keepAlive) {
+            try {
+                keepAlive = audioCtx.createConstantSource();
+                keepAlive.offset.value = 0;
+                keepAlive.connect(audioCtx.destination);
+                keepAlive.start();
+            } catch (e) {
+                keepAlive = null;   // 不支持就退回原行为，不影响功能
+            }
+        }
+        if (mediaElementOutput && bgAudio) {
+            // 显式启动一次：不等到第一帧才 play，避免开头那段排程落在未就绪的窗口里
+            if (bgAudio.paused) bgAudio.play().catch(function (e) { log('audioStartFailed', { message: e.message }); });
+            bgAudio.muted = false;
+        }
+    }
+
+    // 下行重新开启（或换了链路）时重置排程：把上一轮遗留的 nextPlayTime 清掉，
+    // 并标记需要做一次起播淡入。
+    // 不清 nextPlayTime 的话，新会话第一帧会接在上一轮的播放位置上 —— 与音频元素
+    // 当前的播放位置错开，听感就是"开头一段是坏的"。
+    function resyncPlayback() {
+        if (!audioCtx) { startupFadePending = false; return; }
+        // 0.08 秒：够把老内容的尾巴打断，又短到人耳只当是"起播"，不会觉得漏了声音
+        nextPlayTime = audioCtx.currentTime + 0.08;
+        startupFadePending = true;
+    }
+
     function setVolume(v) {
         volume = Math.min(1, Math.max(0, v));
         if (gainNode) gainNode.gain.value = volume;
@@ -454,6 +502,15 @@
             nextPlayTime = now + jitter.targetSec;
             if (delay > jitter.dropAfterSec) log('bufferAhead', { ms: Math.round(delay * 1000) });
         }
+        // 起播遮蔽：只在本次会话的第一帧做一次短淡入。
+        // 音频元素从"开始播放"到"真的出声"之间有段过渡，这期间的样本不可信；
+        // 与其让它以咔哒/失真出现，不如淡进来 —— 听感上就只是"开始了"。
+        if (startupFadePending) {
+            startupFadePending = false;
+            var fade = 0.12;
+            gainNode.gain.setValueAtTime(0, nextPlayTime);
+            gainNode.gain.linearRampToValueAtTime(volume, nextPlayTime + fade);
+        }
         src.start(nextPlayTime);
         nextPlayTime += outFrames / outRate;
     }
@@ -480,6 +537,8 @@
             wsConnected = true; connecting = false; hadConnected = true;
             lastRxAt = lastPongAt = Date.now();
             log('connected', { name: deviceName || '?' });
+            // 每次(重)连都重置排程：新会话的第一帧不该接在上一轮的播放位置上
+            resyncPlayback();
             sendMode();
             updateMediaSession();
             refreshUI();
@@ -617,7 +676,10 @@
         if (speakerOn === on) return;
         speakerOn = on;
         if (on) {
-            ensureAudioCtx();
+            // 先预热再开下行：让音频元素在第一帧到达前就进入播放态，
+            // 并清掉上一轮遗留的 nextPlayTime（否则开头又会出现失真段）
+            warmUpAudio();
+            resyncPlayback();
             requestWakeLock();
             log('listeningOn');
         } else {
@@ -746,7 +808,9 @@
         app.classList.remove('hidden');
         scheduleLayout();
         speakerOn = true;
-        ensureAudioCtx();
+        // 必须在 connect() 之前：音频元素要在第一帧到达前进入播放态，
+        // 否则握手后约 100ms 就开始排程，头几十帧会落在它还没稳定的窗口里（表现为开头失真）
+        warmUpAudio();
         requestWakeLock();
         updateMediaSession();
         refreshUI();
