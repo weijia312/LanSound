@@ -2,12 +2,10 @@
 
 [English](README_EN.md) | 中文
 
-![LanSound](docs/promo/hero-swiss.png)
+![LanSound](docs/promo/icon-hero.png)
 
 PC 与手机连同一局域网，手机扫码打开网页即可收听电脑正在播放的声音。
 **为音质而做**：全链路 48kHz 立体声无损 PCM，不压缩、不降质。
-
-![48kHz 无损](docs/promo/quality-swiss.png)
 
 ## 为什么音质好
 
@@ -22,8 +20,6 @@ PC 与手机连同一局域网，手机扫码打开网页即可收听电脑正�
 两档（高音质 / 低延迟）码流完全一样，差别只在"延迟 vs 抗抖动"的取舍——
 高音质档把缓冲给足，听感优先；低延迟档把延迟压到 60ms 级。默认高音质。
 
-![使用流程](docs/promo/howto-swiss.png)
-
 ## 快速开始
 
 1. 解压 `LanSound-v1.0-win-x64.zip`（Windows 10 19041+，需 .NET 8 Desktop Runtime + Windows App Runtime）
@@ -31,8 +27,7 @@ PC 与手机连同一局域网，手机扫码打开网页即可收听电脑正�
 3. 手机连同一 WiFi，扫码打开页面，点"开始收听"
 4. 锁屏也能听，媒体键可控制
 
-> 首次运行会自动生成本地根证书；手机浏览器遇到证书警告点"继续访问"即可，
-> 或访问 `http://<电脑IP>:7444/ca.crt` 安装根证书。
+> 首次运行会自动生成本地根证书；手机浏览器遇到证书警告点"继续访问"即可。
 
 ## 项目结构
 

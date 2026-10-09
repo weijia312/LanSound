@@ -1,11 +1,9 @@
 # LanSound — Stream Your PC Audio to Your Phone, Losslessly
 
-![LanSound](docs/promo/hero-swiss.png)
+![LanSound](docs/promo/icon-hero.png)
 
 PC and phone on the same LAN: scan the QR code on your phone and listen to whatever your PC is playing.
 **Built for sound quality**: end-to-end 48kHz stereo lossless PCM. No compression, no degradation.
-
-![48kHz Lossless](docs/promo/quality-swiss.png)
 
 ## Why it sounds good
 
@@ -20,8 +18,6 @@ PC and phone on the same LAN: scan the QR code on your phone and listen to whate
 Both modes (High quality / Low latency) carry the identical stream — the only difference is the latency-vs-robustness tradeoff.
 High-quality mode gives the buffer room; low-latency mode cuts delay to ~60ms. High quality is the default.
 
-![How it works](docs/promo/howto-swiss.png)
-
 ## Quick start
 
 1. Extract `LanSound-v1.0-win-x64.zip` (Windows 10 19041+, .NET 8 Desktop Runtime + Windows App Runtime required)
@@ -29,8 +25,7 @@ High-quality mode gives the buffer room; low-latency mode cuts delay to ~60ms. H
 3. Phone on the same Wi-Fi: scan the code, tap "Start listening"
 4. Works on lock screen; media keys control playback
 
-> A local root CA is generated on first launch. Tap "Continue" on the browser certificate warning,
-> or install the root cert from `http://<PC-LAN-IP>:7444/ca.crt`.
+> A local root CA is generated on first launch. Tap "Continue" on the browser certificate warning.
 
 ## Project layout
 
