@@ -24,6 +24,8 @@ High-quality mode gives the buffer room; low-latency mode cuts delay to ~60ms. H
 3. Phone on the same Wi-Fi: scan the code, tap "Start listening"
 4. Works on lock screen; media keys control playback
 
+![Phone player UI](docs/promo/phone-ui-en.png)
+
 > A local root CA is generated on first launch. Tap "Continue" on the browser certificate warning.
 
 ## Project layout
