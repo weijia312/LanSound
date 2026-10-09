@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#e7e9ec">
+  <title>澜声 LanSound</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" type="image/png" sizes="180x180">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 启动首屏：必须由用户手势进入，否则 iOS 不允许解锁音频播放 -->
+  <div id="startScreen">
+    <div class="start-brand">LanSound</div>
+    <button id="startBtn" aria-label="开始收听电脑声音" data-i18n-aria="startAria">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="8,5 20,12 8,19" fill="currentColor"/></svg>
+    </button>
+    <div class="start-hint" data-i18n="startHint">点上方按钮收听电脑声音</div>
+  </div>
+
+  <!-- 主界面：TP-7 机箱（视觉 1:1，功能接澜声信令） -->
+  <div id="app" class="hidden">
+    <div class="device-viewport">
+      <div class="tp7-chassis">
+
+        <!-- 1. OLED 屏幕：状态 / 时间码 / 实时波形 / 日志 / VU -->
+        <div class="screen-housing active">
+          <div class="screen-glass"></div>
+          <div class="oled-content active">
+            <div class="oled-top">
+              <div class="oled-status">
+                <div class="status-led" id="connLed"></div>
+                <span id="oledStatusText">LINK</span>
+              </div>
+              <span>48kHz / 16bit</span>
+            </div>
+            <div class="oled-center">
+              <div class="oled-track" id="oledTrack" data-i18n="waiting">等待连接…</div>
+              <div class="oled-timecode" id="oledTimecode">00:00:00</div>
+              <canvas class="oled-canvas" id="wave" width="336" height="52"></canvas>
+              <ul class="oled-log" id="logList"></ul>
+            </div>
+            <div class="oled-bottom">
+              <span id="modeLabel" data-i18n="qualityMode">高音质</span>
+              <div class="vu-container">
+                <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+                <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+                <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+                <div class="vu-bar"></div><div class="vu-bar"></div><div class="vu-bar"></div>
+              </div>
+              <span id="volLabel">VOL 80</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 原「品牌行 + 传感器孔」整块已按标注去除：
+             品牌字 LanSound 与 OLED 下方两个小点都不再显示。
+             原先它承担 OLED 与转盘之间的间距，现在改由 .wheel-container 的 padding-top 负责。 -->
+
+        <!-- 3.  motorized 转盘：播放时随音乐滚动 -->
+        <div class="wheel-container">
+          <div class="wheel-recess" id="wheelRecess">
+            <div class="wheel-disc" id="wheelDisc">
+              <div class="disc-hairline"></div>
+              <div class="center-hub">
+                <div class="hub-pin pin-1"></div>
+                <div class="hub-pin pin-2"></div>
+                <div class="hub-pin pin-3"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 左下凹面钮：返回首屏 -->
+          <button class="dimple-btn" id="backBtn" type="button" title="返回首屏" aria-label="返回首屏" data-i18n-title="backTitle" data-i18n-aria="backTitle"></button>
+
+          <!-- 右下楔形槽：音量加减 -->
+          <div class="capsule-slot">
+            <button class="capsule-btn" id="volUp" type="button" title="音量加" aria-label="音量加" data-i18n-title="volumeUp" data-i18n-aria="volumeUp">+</button>
+            <button class="capsule-btn" id="volDown" type="button" title="音量减" aria-label="音量减" data-i18n-title="volumeDown" data-i18n-aria="volumeDown">&minus;</button>
+          </div>
+        </div>
+
+        <!-- 4. 底部三联机械键：刷新 / 播放 / 暂停 -->
+        <div class="transport-bar">
+          <button class="key-rocker key-left" id="refreshBtn" type="button" title="刷新连接" aria-label="刷新连接" data-i18n-title="refresh" data-i18n-aria="refresh">
+            <div class="key-dimple"></div>
+          </button>
+          <div class="key-groove"></div>
+          <button class="key-rocker key-center" id="playBtn" type="button" title="开始收听" aria-label="开始收听" aria-pressed="false" data-i18n-title="play" data-i18n-aria="startAria">
+            <div class="key-center-surface"></div>
+          </button>
+          <div class="key-groove"></div>
+          <button class="key-rocker key-right" id="stopBtn" type="button" title="暂停收听" aria-label="暂停收听" aria-pressed="true" data-i18n-title="pause" data-i18n-aria="pause">
+            <div class="key-dimple"></div>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- iOS 声音解锁兜底按钮（需要时显示） -->
+    <button id="speakerBtn" class="capsule-btn big-btn hidden" aria-label="启用声音" data-i18n-aria="enableSound">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.6 5.4a9 9 0 0 1 0 13.2"/></svg>
+    </button>
+
+    <div id="errorCard" class="hidden">
+      <strong data-i18n="unavailable">无法使用</strong>
+      <p id="errorText"></p>
+    </div>
+  </div>
+
+  <!-- 播放出口：PCM → Web Audio → MediaStreamDestination → 本元素；挂后台/锁屏后按媒体播放继续出声 -->
+  <audio id="bgAudio" playsinline preload="none" class="hidden"></audio>
+
+  <script src="client.js"></script>
+</body>
+</html>
