@@ -167,13 +167,22 @@
     var wsConnected = false;
     var connecting = false;
     var speakerOn = false;
-    var audioCtx = null, gainNode = null, streamDest = null, keepAlive = null;
+    var audioCtx = null, gainNode = null, streamDest = null;
     var mediaElementOutput = false;
     var nextPlayTime = 0;
     // 启动遮蔽：PCM 刚开始排程时做一次短淡入。
     // 原因见 warmUpAudio()：<audio> 播放 MediaStream 需要一段协商/缓冲时间，
     // 这期间排进去的帧出来是失真的 —— 实测用户听到"每次连接有 1 秒失真"。
     var startupFadePending = false;
+
+    // 音频元素是否已真正进入播放态（收到 'playing' 事件）。
+    // 未就绪期间直接**丢弃** PCM 帧，不排程 —— 见 playPcmFrame 开头的门控。
+    //
+    // 这里刻意**不**用"往 audioCtx.destination 接一个恒 0 源"来让图跑起来：
+    // 那会在扬声器上多开一条音频通路，iOS 切后台时会挂起/重排 AudioContext，
+    // 两条通路状态不一致就会**持续爆音**（实测回归）。元素就绪门控没有这个副作用。
+    var audioReady = false;
+    var bgAudioReadyHooked = false;
     var volume = 0.8;
     var deviceName = '';
     var lastRxAt = Date.now();
@@ -384,39 +393,30 @@
 
     // 预热音频管线：必须在**第一帧到达之前**调用（在用户点击的手势里调，播放才不会被拦）。
     //
-    // 要解决的是一个启动期结构性缺陷，三件事叠在一起：
-    //   1. 走的是 MediaStreamDestination → <audio> 这条路（为了锁屏播放）。
-    //      AudioContext 只连 MediaStreamDestination 时，因为没有连扬声器，
-    //      图的输出不被消费 —— currentTime 不推进、也没有静音"垫着"。
-    //   2. <audio> 播 MediaStream 要经过协商 + 缓冲才出声，这是**异步**的；
-    //      而 PCM 帧在握手后 ~100ms 就开始到，比它早就开始排程了。
-    //   3. 结果是头几十帧落在音频元素还没稳定的窗口里 —— 听感就是开头约 1 秒失真。
-    //
-    // 修法：用一个恒定 0 的源持续连到扬声器，让 (a) currentTime 立刻开始推进，
-    // (b) 元素一开始播放的就是这段静音，等真正的 PCM 接上来时它已经稳定。
-    // 它是 0 信号，直接听不见，也不进 MediaStream，锁屏播放不受影响。
+    // 要解决的是一个启动期结构性缺陷：<audio> 播放 MediaStream 需要**协商 + 缓冲**才出声，
+    // 而 PCM 帧在握手后约 100ms 就开始到（实测日志：手机已连接 → 已开始采集 相隔 116ms）。
+    // 头几十帧因此落在音频元素还没稳定的窗口里，听感就是开头一段失真。
     function warmUpAudio() {
         ensureAudioCtx();
         if (!audioCtx) return;
-        if (!keepAlive) {
-            try {
-                keepAlive = audioCtx.createConstantSource();
-                keepAlive.offset.value = 0;
-                keepAlive.connect(audioCtx.destination);
-                keepAlive.start();
-            } catch (e) {
-                keepAlive = null;   // 不支持就退回原行为，不影响功能
-            }
-        }
         if (mediaElementOutput && bgAudio) {
-            // 显式启动一次：不等到第一帧才 play，避免开头那段排程落在未就绪的窗口里
-            if (bgAudio.paused) bgAudio.play().catch(function (e) { log('audioStartFailed', { message: e.message }); });
             bgAudio.muted = false;
+            // 显式启动一次，不等到第一帧才 play
+            if (bgAudio.paused) bgAudio.play().catch(function (e) { log('audioStartFailed', { message: e.message }); });
+            // 记录元素状态变化，配合 audioReady 决定何时放行第一帧
+            if (!bgAudioReadyHooked) {
+                bgAudioReadyHooked = true;
+                bgAudio.addEventListener('playing', function () { audioReady = true; });
+                bgAudio.addEventListener('pause', function () { audioReady = false; });
+            }
+        } else {
+            // 直出 Web Audio（没有 <audio> 这条路），没有协商窗口，直接放行
+            audioReady = true;
         }
     }
 
     // 下行重新开启（或换了链路）时重置排程：把上一轮遗留的 nextPlayTime 清掉，
-    // 并标记需要做一次起播淡入。
+    // 并标记需要一次起播淡入、需要重新等音频元素就绪。
     // 不清 nextPlayTime 的话，新会话第一帧会接在上一轮的播放位置上 —— 与音频元素
     // 当前的播放位置错开，听感就是"开头一段是坏的"。
     function resyncPlayback() {
@@ -424,7 +424,12 @@
         // 0.08 秒：够把老内容的尾巴打断，又短到人耳只当是"起播"，不会觉得漏了声音
         nextPlayTime = audioCtx.currentTime + 0.08;
         startupFadePending = true;
+        if (mediaElementOutput && bgAudio && bgAudio.paused) audioReady = false;
     }
+
+    // 兜底：<audio> 的 playing 事件万一不来（元素被系统中断、静音开关等），
+    // 不能永远压着不放行。到时无条件放行，退回原行为。
+    setTimeout(function () { audioReady = true; }, 800);
 
     function setVolume(v) {
         volume = Math.min(1, Math.max(0, v));
@@ -442,6 +447,21 @@
         if (!speakerOn) return;
         if (buf.byteLength < 4 || buf.byteLength % 4 !== 0) return;
         ensureAudioCtx();
+
+        // 就绪门控：音频元素还没真正开始播之前**丢弃**帧，不做排程。
+        //
+        // 这是替代"往扬声器接恒 0 源"的方案 —— 那条路在 iOS 后台会导致持续爆音。
+        // 丢帧比排程更安全：没排进去的内容不会在元素抖动时以失真形式冒出来。
+        // 代价只是开头约 100~300ms 的音频被丢掉（用户感知为"起播稍慢"，而非失真）。
+        if (!audioReady) {
+            if (mediaElementOutput && bgAudio) {
+                if (!bgAudio.paused && bgAudio.readyState >= 2) audioReady = true;  // HAVE_CURRENT_DATA
+                else return;                                                        // 未就绪，丢弃本帧
+            } else {
+                audioReady = true;   // 直出 Web Audio，无需等
+            }
+        }
+
         var n = buf.byteLength >> 2; // 每声道采样数
         // 服务端发的是 s16le 立体声交错 PCM，不能把字节直接解释成 Float32。
         // 明确按小端读出，并拆成 Web Audio 所需的左右声道浮点数组。

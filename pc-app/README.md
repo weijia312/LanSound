@@ -571,16 +571,40 @@ var needed = el.scrollWidth;   // ← 恒等于 clientWidth
 [09:49:34.600] 已开始采集系统声音：耳机 (EarPods)（48000Hz 2ch → 48kHz 立体声下行）
 ```
 
-修法三件事：
+### 第一版修法是错的：往扬声器接恒 0 源 → iOS 后台持续爆音
+
+第一版我用了 `audioCtx.createConstantSource()`（offset=0）接到 `audioCtx.destination`，
+想让 `currentTime` 立刻推进、元素一开始就有静音"垫着"。**这个方案引入了一个更严重的问题**：
+
+它在扬声器上多开了**第二条音频通路**：
+
+```
+通路 A（原有，锁屏靠它）：PCM → gain → MediaStreamDestination → <audio> 元素
+通路 B（第一版新加）：    恒0源 → audioCtx.destination（直接到扬声器输出）
+```
+
+前台时 iOS 容忍两条并存；**切到后台后会挂起/重排 AudioContext**，
+两条通路的状态就不一致了 —— 表现是**持续爆音**（用户反馈："苹果手机切到后台声音一直不正常爆音"）。
+
+> 教训：**别为了控制时序而在音频图上加第二条到扬声器的通路。**
+> 多一条通路就多一个状态机，前后台切换时它们必然不同步。
+
+### 最终修法：就绪门控（不加通路）
 
 | 改动 | 作用 |
 |---|---|
-| 新增 `warmUpAudio()`，在**用户点击手势里**（`startBtn` / `setSpeaker(true)`）调用 | 用 `createConstantSource()` 接一个恒 0 的源到 `audioCtx.destination`，让 `currentTime` 立刻推进、元素一开始播的就是这段静音；等真 PCM 接上来时它已经稳定 |
-| 新增 `resyncPlayback()`，在 `hello` 握手与下行重开时调用 | 清掉上一轮遗留的 `nextPlayTime`。不清的话新会话第一帧会接在上一轮的播放位置上，与元素的当前播放位置错开 |
-| `startupFadePending` 标志 + 首帧 0.12 秒线性淡入 | 兜底遮蔽残余过渡。与其让它以咔哒/失真出现，不如淡进来 —— 听感上就只是"开始了" |
+| 新增 `warmUpAudio()`，在**用户点击手势里**（`startBtn` / `setSpeaker(true)`）调用 | 只做两件事：确保 AudioContext 已建、显式 `bgAudio.play()`。**不碰音频图** |
+| `audioReady` 门控 + `playing`/`pause` 事件 | 元素**真正进入播放态之前直接丢弃 PCM 帧**，不排程。丢帧比排程安全：没排进去的内容不会在元素抖动时以失真形式冒出来 |
+| 新增 `resyncPlayback()`，在 `hello` 握手与下行重开时调用 | 清掉上一轮遗留的 `nextPlayTime`；元素处于暂停态则重新置 `audioReady = false` |
+| `startupFadePending` + 首帧 0.12 秒线性淡入 | 兜底遮蔽残余过渡 |
+| `setTimeout(... , 800)` 兜底放行 | `playing` 事件万一不来（系统中断等）不能永远压着，到时无条件放行 |
 
-> 关键是**预热必须早于第一帧**。`warmUpAudio()` 放在 `connect()` 之前、
+代价：开头约 100–300ms 的音频被**丢掉**。用户感知是"起播稍慢"，而不是失真 ——
+这个取舍是对的，失真比延迟难忍得多。
+
+> 关键是**预热必须早于第一帧**。`warmUpAudio()` 放在 `connect()` 之前，
 > 且在用户点击的调用栈里 —— 后者很重要：不在手势里调用，`bgAudio.play()` 会被浏览器拦。
 
-> 说明：这个修复**只在本机验证了语法与协议链路**（`mock-phone.js` 走通、帧格式正确）。
-> Web Audio 的实际出声行为**必须在真机浏览器里验证** —— 我没有 Android 设备。
+> 说明：这两版修复都**只在本机验证了语法与协议链路**（`mock-phone.js` 走通、帧格式正确）。
+> Web Audio 的实际出声行为、尤其 iOS 前后台切换，**必须在真机上验证** —— 我没有 Apple 设备。
+> 第一版的爆音就是靠用户真机反馈才发现的。
