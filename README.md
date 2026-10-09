@@ -2,12 +2,12 @@
 
 [English](README_EN.md) | 中文
 
-![LanSound](docs/promo/hero-dark.png)
+![LanSound](docs/promo/hero-swiss.png)
 
 PC 与手机连同一局域网，手机扫码打开网页即可收听电脑正在播放的声音。
 **为音质而做**：全链路 48kHz 立体声无损 PCM，不压缩、不降质。
 
-![48kHz 无损](docs/promo/quality-dark.png)
+![48kHz 无损](docs/promo/quality-swiss.png)
 
 ## 为什么音质好
 
@@ -22,7 +22,7 @@ PC 与手机连同一局域网，手机扫码打开网页即可收听电脑正�
 两档（高音质 / 低延迟）码流完全一样，差别只在"延迟 vs 抗抖动"的取舍——
 高音质档把缓冲给足，听感优先；低延迟档把延迟压到 60ms 级。默认高音质。
 
-![使用流程](docs/promo/how-it-works-dark.png)
+![使用流程](docs/promo/howto-swiss.png)
 
 ## 快速开始
 
