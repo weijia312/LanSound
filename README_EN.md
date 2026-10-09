@@ -3,15 +3,14 @@
 ![LanSound](docs/promo/icon-hero.png)
 
 PC and phone on the same LAN: scan the QR code on your phone and listen to whatever your PC is playing.
-**Built for sound quality**: end-to-end 48kHz stereo lossless PCM. No compression, no degradation.
+End-to-end 48kHz stereo lossless PCM. No compression, no degradation.
 
-## Why it sounds good
+## Excellent sound quality
 
 | Stage | How |
 |---|---|
 | Capture | WASAPI loopback grabs the system mix directly — no transcoding |
 | Stream | 48kHz / 16-bit / stereo raw PCM, 20ms frames, sent as binary over WebSocket |
-| Resampling | Device not on 48kHz? Left and right channels are **independently** resampled to 48kHz — stereo imaging fully preserved, never downmixed to mono |
 | High-quality mode | 200ms jitter buffer + 750ms clock-drift correction — dropouts stay away on shaky Wi-Fi |
 | Verified | Built-in `tools/probe-*` audio probes: resampling duration conservation, pitch preservation, lossless amplitude, zero stereo crosstalk — all measurable |
 
@@ -35,8 +34,6 @@ phone-web/     Phone web player (Web Audio)
 tools/         Dev tools: audio probes, color tooling, packaging scripts
 docs/          Protocol docs
 ```
-
-See [pc-app/README.md](pc-app/README.md) for build instructions, troubleshooting, and lessons learned.
 
 ## License
 
