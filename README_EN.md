@@ -1,11 +1,11 @@
 # LanSound — Stream Your PC Audio to Your Phone, Losslessly
 
-![LanSound](docs/promo/hero.png)
+![LanSound](docs/promo/hero-dark.png)
 
 PC and phone on the same LAN: scan the QR code on your phone and listen to whatever your PC is playing.
 **Built for sound quality**: end-to-end 48kHz stereo lossless PCM. No compression, no degradation.
 
-![48kHz Lossless](docs/promo/quality.png)
+![48kHz Lossless](docs/promo/quality-dark.png)
 
 ## Why it sounds good
 
@@ -20,7 +20,7 @@ PC and phone on the same LAN: scan the QR code on your phone and listen to whate
 Both modes (High quality / Low latency) carry the identical stream — the only difference is the latency-vs-robustness tradeoff.
 High-quality mode gives the buffer room; low-latency mode cuts delay to ~60ms. High quality is the default.
 
-![How it works](docs/promo/how-it-works.png)
+![How it works](docs/promo/how-it-works-dark.png)
 
 ## Quick start
 
