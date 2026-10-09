@@ -64,7 +64,7 @@ public static class CertManager
             return existing;
         }
 
-        log?.Invoke("签发新的服务器证书（SAN: " + string.Join(", ", san) + "）");
+        log?.Invoke(Strings.LogCertIssued(string.Join(", ", san)));
         var server = IssueServerCertificate(ca, san);
         File.WriteAllBytes(ServerPfxPath, server.Export(X509ContentType.Pfx));
         File.WriteAllText(ServerSanPath, string.Join(",", san));
@@ -78,7 +78,7 @@ public static class CertManager
         var existing = LoadFromPfx(CaPfxPath, CaKeyFlags);
         if (existing != null) return existing;
 
-        log?.Invoke("首次启动：生成本地根 CA（LanMic Local Root CA）");
+        log?.Invoke(Strings.LogCaCreated);
         using var key = RSA.Create(2048);
         var req = new CertificateRequest(
             "CN=LanMic Local Root CA", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);

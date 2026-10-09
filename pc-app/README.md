@@ -158,6 +158,30 @@ powershell -File tools\pack.ps1 -Rid win-arm64     # ARM64
 
 > 抖动缓冲不是越小越好：它要吃掉的正是网络抖动与音频时钟漂移。低延迟档在 WiFi 不稳时更容易出现断续，
 > 这是取舍而非缺陷；网络环境差就切回高音质。
+### 中英适配：跟随系统语言，无手动选项
+
+PC 端与手机端**各自读自己的环境**，都不提供语言选项：
+
+| 端 | 判定来源 | 中文 | 英文 |
+|---|---|---|---|
+| PC（WinUI） | `CultureInfo.CurrentUICulture`（= Windows 首选 UI 语言） | 以 `zh` 开头 | 其余一律 |
+| 手机（网页） | `navigator.language` / `navigator.languages` | 以 `zh` 开头 | 其余一律 |
+
+两端判定规则一致，所以不会出现"电脑中文、手机英文"。手机端还监听 `languagechange`，
+用户在浏览器里改语言不用刷新。
+
+**文案只翻译界面上看得见的**。写进 `app.log` 的调试日志保持中文 ——
+它面向排障，翻译只会让日志检索变难。PC 端文案集中在 `Strings.cs`，
+XAML 里**不写任何文案**（语言运行时才确定，写死就没法换），启动后由 `ApplyLanguage()` 覆盖。
+ToolTip 和无障碍名（`AutomationProperties.Name`）同样走 `Strings` —— 读屏软件也要跟着语言走。
+
+> 踩过的坑：一开始用 `Windows.Globalization.ApplicationLanguages.Languages` 做二级判断，
+> 但那要求 Windows App SDK 已初始化，早期调用会抛异常，
+> 被 `catch` 吞掉后**回退成"总是中文"** —— 表现为英文机器上界面仍是中文。
+> 现在只读 `CultureInfo.CurrentUICulture`，不需要任何初始化。
+
+验证用（不对外暴露）：设 `LANSOUND_LANG_OVERRIDE=zh|en` 强制语言，
+`LANSOUND_LANG_DEBUG=1` 打印判定过程。
 ### 开机自启
 
 设置卡里的「开机自动启动」复选框，勾选后写当前用户的注册表 Run 项：

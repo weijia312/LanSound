@@ -104,7 +104,7 @@ public sealed class SignalServer
         _runTask = app.WaitForShutdownAsync();
 
         var scheme = PlainHttp ? "http" : "https";
-        OnLog($"信令服务已启动：{scheme}://0.0.0.0:{Port}（根证书下载：http://0.0.0.0:{CertDownloadPort}/ca.crt）");
+        OnLog(Strings.LogServerStarted(scheme, Port, CertDownloadPort));
     }
 
     /// <summary>停止服务，供切换端口时重启使用。可重复调用。</summary>
@@ -123,7 +123,7 @@ public sealed class SignalServer
         }
         catch (Exception ex)
         {
-            OnLog($"停止服务时出错（继续重启）：{ex.Message}");
+            OnLog(Strings.LogStopError(ex.Message));
         }
         finally
         {
@@ -144,7 +144,7 @@ public sealed class SignalServer
         var webRoot = FindPhoneWebDir();
         if (webRoot == null)
         {
-            OnLog("警告：未找到 phone-web 目录，手机页面将无法加载");
+            OnLog(Strings.LogPhoneWebMissing);
             return;
         }
         var provider = new PhysicalFileProvider(webRoot);
@@ -178,18 +178,18 @@ public sealed class SignalServer
         var previous = Interlocked.Exchange(ref _currentWs, ws);
         if (previous != null)
         {
-            OnLog("新手机接入，断开上一会话");
+            OnLog(Strings.LogReplacedOldSession);
             await CloseQuietlyAsync(previous, WebSocketCloseStatus.NormalClosure, "replaced");
         }
 
-        OnLog("手机已连接");
+        OnLog(Strings.LogPhoneConnected);
         try
         {
             await RunSessionAsync(ws, ctx.RequestAborted);
         }
         catch (WebSocketException ex)
         {
-            OnLog($"会话异常：{ex.Message}");
+            OnLog(Strings.LogSessionError(ex.Message));
         }
         catch (OperationCanceledException)
         {
@@ -200,7 +200,7 @@ public sealed class SignalServer
             // 仅当前连接的退出可以清除当前状态；被新手机替换的旧连接
             // 不能把新连接的状态也清掉或让 UI 误报“手机已断开”。
             if (ReferenceEquals(Interlocked.CompareExchange(ref _currentWs, null, ws), ws))
-                OnLog("手机已断开");
+                OnLog(Strings.LogPhoneDisconnected);
         }
     }
 
@@ -227,7 +227,7 @@ public sealed class SignalServer
                 if (!dropsLogged)
                 {
                     dropsLogged = true;
-                    OnLog("下行数据积压，已开始丢弃音频帧（手机侧网络变慢）");
+                    OnLog(Strings.LogBackpressureOn);
                 }
                 return;
             }
@@ -244,14 +244,14 @@ public sealed class SignalServer
             }
             catch (Exception ex)
             {
-                OnLog($"下行 PCM 发送失败：{ex.Message}");
+                OnLog(Strings.LogSendFailed(ex.Message));
             }
             finally
             {
                 if (Interlocked.Decrement(ref queued) < MaxQueuedFrames && dropsLogged)
                 {
                     dropsLogged = false;
-                    OnLog("下行数据积压已恢复");
+                    OnLog(Strings.LogBackpressureOff);
                 }
             }
         };
@@ -286,7 +286,7 @@ public sealed class SignalServer
                 catch (OperationCanceledException) when (!stopping.IsCancellationRequested)
                 {
                     // 下行是 PC 单方推送，手机端每 10 秒发 ping 保活，所以超时即可判定为断开
-                    OnLog($"连接空闲超过 {IdleTimeout.TotalSeconds:F0} 秒，自动断开");
+                    OnLog(Strings.LogIdleTimeout((int)IdleTimeout.TotalSeconds));
                     await CloseQuietlyAsync(ws, WebSocketCloseStatus.NormalClosure, "idle-timeout");
                     return;
                 }

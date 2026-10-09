@@ -4,6 +4,7 @@ using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -74,7 +75,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "澜声 LanSound - 电脑声音传到手机";
+        ApplyLanguage();
 
         ConfigureWindow();
         LogList.ItemsSource = _log;
@@ -83,6 +84,43 @@ public sealed partial class MainWindow : Window
 
         InitSettings();
         ApplyConnectionColors();
+    }
+
+    /// <summary>
+    /// 把界面文案设成当前系统语言（见 <see cref="Strings"/>）。
+    /// <para>
+    /// 文案全部写在代码里而不是 XAML：语言在运行时才确定，XAML 里写死就没法换。
+    /// XAML 只留启动瞬间的占位文本，这里立刻覆盖掉。
+    /// </para>
+    /// </summary>
+    private void ApplyLanguage()
+    {
+        Title = Strings.WindowTitle;
+        SetStatus(Strings.StatusStarting);
+
+        QrHeader.Text = Strings.CardQr;
+        CertHintText.Text = Strings.CertHint;
+        SettingsHeader.Text = Strings.CardSettings;
+        QualityLabel.Text = Strings.LabelQuality;
+        LogHeader.Text = Strings.CardLog;
+        HintBar.Title = Strings.InfoBarTitle;
+
+        ModeHighQuality.Content = Strings.ModeHighQuality;
+        ModeLowLatency.Content = Strings.ModeLowLatency;
+        AutoStartCheck.Content = Strings.AutoStartLabel;
+
+        // ToolTip 与无障碍名也要跟着语言走（它们同样会被读屏软件念出来）
+        ToolTipService.SetToolTip(IpCombo, Strings.TipIpCombo);
+        AutomationProperties.SetName(IpCombo, Strings.TipIpCombo);
+        ToolTipService.SetToolTip(PortText, Strings.TipPort);
+        AutomationProperties.SetName(PortText, Strings.TipPort);
+        ToolTipService.SetToolTip(ModeHighQuality, Strings.TipHighQuality);
+        AutomationProperties.SetName(ModeHighQuality, Strings.TipHighQuality);
+        ToolTipService.SetToolTip(ModeLowLatency, Strings.TipLowLatency);
+        AutomationProperties.SetName(ModeLowLatency, Strings.TipLowLatency);
+        ToolTipService.SetToolTip(AutoStartCheck, Strings.TipAutoStart);
+        AutomationProperties.SetName(AutoStartCheck, Strings.AutoStartLabel);
+        AutomationProperties.SetName(QrImage, Strings.CardQr);
     }
 
     /// <summary>整窗底色随连接状态变化：未连接 WinUI 默认浅色、已连接深绿。</summary>
@@ -191,7 +229,7 @@ public sealed partial class MainWindow : Window
 
         UrlText.Text = url;
         if (!_connected)
-            SetStatus("请用手机扫码连接（同一局域网）");
+            SetStatus(Strings.StatusWaitScan);
 
         // 每个模块 14px，缩放到 184 显示仍清晰
         await SetQrAsync(QrPairing.GeneratePng(url, pixelsPerModule: 14));
@@ -231,15 +269,15 @@ public sealed partial class MainWindow : Window
         => App.Instance.UIQueue.TryEnqueue(() =>
         {
             AppendLog(msg);
-            if (msg.Contains("手机已连接"))
+            if (msg.Contains(Strings.LogPhoneConnected))
             {
                 _connected = true;
-                SetStatus("手机已连接");
+                SetStatus(Strings.StatusConnected);
             }
-            else if (msg.Contains("手机已断开"))
+            else if (msg.Contains(Strings.LogPhoneDisconnected))
             {
                 _connected = false;
-                SetStatus("手机已断开，等待自动重连");
+                SetStatus(Strings.StatusDisconnected);
             }
             ApplyConnectionColors();
         });
@@ -284,12 +322,12 @@ public sealed partial class MainWindow : Window
             try { AutoStartCheck.IsChecked = !want; }
             finally { _suppressPortEvents = false; }
 
-            AppendLog("开机自启设置失败，可能被系统策略限制");
+            AppendLog(Strings.LogAutoStartFailed);
             UpdateAutoStartHint();
             return;
         }
 
-        AppendLog(want ? "已开启开机自启（登录后自动运行）" : "已关闭开机自启");
+        AppendLog(want ? Strings.LogAutoStartOn : Strings.LogAutoStartOff);
         UpdateAutoStartHint();
     }
 
@@ -297,8 +335,8 @@ public sealed partial class MainWindow : Window
     private void UpdateAutoStartHint()
     {
         AutoStartHint.Text = AutoStartCheck.IsChecked == true
-            ? $"登录 Windows 后自动运行：{AutoStart.LaunchCommand}"
-            : "关闭时需手动启动。开启后登录 Windows 即自动运行，手机随时能连。";
+            ? Strings.AutoStartOn(AutoStart.LaunchCommand)
+            : Strings.AutoStartOff;
     }
 
     /// <summary>端口框直接生效（不需要按钮）：内容合法且与当前不同时切换。</summary>
@@ -314,10 +352,9 @@ public sealed partial class MainWindow : Window
         }
         if (port == App.Instance.Port) return;
 
-        var confirmed = await ShowDialogAsync("切换服务端口",
-            $"将把服务端口从 {App.Instance.Port} 改为 {port}。\n\n"
-            + "内置服务会重启，手机上的连接会断开，需要重新扫码。\n"
-            + "确定继续吗？", "确定切换", "取消");
+        var confirmed = await ShowDialogAsync(Strings.DialogPortTitle,
+            Strings.DialogPortBody(App.Instance.Port, port),
+            Strings.DialogConfirm, Strings.DialogCancel);
         if (!confirmed)
         {
             _suppressPortEvents = true;
@@ -326,20 +363,20 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        SetStatus("正在切换端口…");
+        SetStatus(Strings.StatusSwitchingPort);
         if (!await App.Instance.ChangePortAsync(port))
         {
             // 失败原因已由 App 弹窗说明，这里回显旧端口
             _suppressPortEvents = true;
             PortText.Text = App.Instance.Port.ToString();
             _suppressPortEvents = false;
-            SetStatus(_connected ? "手机已连接" : "请用手机扫码连接（同一局域网）");
+            SetStatus(_connected ? Strings.StatusConnected : Strings.StatusWaitScan);
             return;
         }
 
         UpdatePairingDisplay();
-        AppendLog($"服务端口已切换为 {port}，请让手机重新扫码");
-        SetStatus("端口已切换，请让手机重新扫码");
+        AppendLog(Strings.LogPortChanged(port));
+        SetStatus(Strings.StatusPortChanged);
     }
 
     /// <summary>切换音频档位：立即作用于进行中的会话，并落盘记住。</summary>
@@ -357,23 +394,20 @@ public sealed partial class MainWindow : Window
 
         AppConfig.SetAudioMode(mode);
         UpdateAudioModeHint();
-        AppendLog(mode == AudioMode.LowLatency
-            ? "已切换到低延迟模式（抖动缓冲更小）"
-            : "已切换到高音质模式（优先不断音）");
+        AppendLog(Strings.LogAudioMode(mode == AudioMode.LowLatency));
     }
 
     /// <summary>档位说明 —— 让用户知道这一档换来的是什么。</summary>
     private void UpdateAudioModeHint()
     {
-        // 文案压短以适配窄窗口（内容区约 400 有效像素）
         AudioModeHint.Text = App.Instance.AudioMode == AudioMode.LowLatency
-            ? "低延迟：抖动缓冲 60ms，响应更快，但网络一抖更易断续"
-            : "高音质：抖动缓冲 200ms，优先不断音、不丢采样";
+            ? Strings.HintLowLatency
+            : Strings.HintHighQuality;
     }
 
     /// <summary>显示一个模态对话框，返回用户是否点了主按钮。首参为空则只显示确定。</summary>
     private async Task<bool> ShowDialogAsync(string title, string message,
-        string primary = "确定", string? close = null)
+        string primary = "OK", string? close = null)
     {
         var dialog = new ContentDialog
         {

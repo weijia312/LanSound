@@ -131,7 +131,7 @@ public sealed class SpeakerLoopback : IDisposable
             _started = true;
         }
 
-        RequestReattach("启动采集");
+        RequestReattach(Strings.ReasonStartup);
         // 巡检无条件启动：接入失败 / 静默失效（蓝牙切模式等）都靠它周期性重试恢复
         _healthTimer = new Timer(_ => CheckHealth(), null,
             TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
@@ -154,7 +154,7 @@ public sealed class SpeakerLoopback : IDisposable
                 // 合并突发：设备切换瞬间系统会连发多条通知，排空后只重挂一次
                 while (_reattachQueue.TryTake(out _)) { }
                 try { Reattach(reason); }
-                catch (Exception ex) { _log($"重挂采集异常：{ex.Message}"); }
+                catch (Exception ex) { _log(Strings.LogReattachError(ex.Message)); }
             }
         }
         catch (ObjectDisposedException)
@@ -180,7 +180,7 @@ public sealed class SpeakerLoopback : IDisposable
             var fmt = capture.WaveFormat;
             if (fmt.Encoding != WaveFormatEncoding.IeeeFloat)
             {
-                _log($"扬声器采集格式不支持（{fmt.SampleRate}Hz/{fmt.Encoding}），无法回传");
+                _log(Strings.LogFormatUnsupported(fmt.SampleRate, fmt.Encoding.ToString()));
                 capture.Dispose();
                 device.Dispose();
                 return false;
@@ -198,15 +198,15 @@ public sealed class SpeakerLoopback : IDisposable
 
             var how = fmt.SampleRate == SampleRate
                 ? $"{fmt.SampleRate}Hz {fmt.Channels}ch"
-                : $"{fmt.SampleRate}Hz {fmt.Channels}ch（重采样为 {SampleRate}Hz）";
+                : Strings.LogResamplingNote(fmt.SampleRate, fmt.Channels);
             _log(announce
-                ? $"已开始采集系统声音：{device.FriendlyName}（{how} → 48kHz 立体声下行）"
-                : $"重新挂载采集：{device.FriendlyName}（{how}）");
+                ? Strings.LogCaptureStarted(device.FriendlyName, how)
+                : Strings.LogCaptureReattached(device.FriendlyName, how));
             return true;
         }
         catch (Exception ex)
         {
-            _log($"接入默认播放设备失败：{ex.Message}");
+            _log(Strings.LogAttachFailed(ex.Message));
             try { capture?.Dispose(); } catch { }
             try { device?.Dispose(); } catch { }
             return false;
@@ -259,7 +259,7 @@ public sealed class SpeakerLoopback : IDisposable
         // 但只要还在运行态就必须允许继续重挂，否则一次失败 = 永久无声。
         if (!_started) return;   // 已 Dispose
 
-        _log($"检测到音频设备变化（{reason}），重新挂载采集");
+        _log(Strings.LogDeviceChanged(reason));
         DetachCurrent();
         ResetPipeline();
         if (AttachToDefaultDevice(announce: !_everAttached)) _everAttached = true;
@@ -294,20 +294,20 @@ public sealed class SpeakerLoopback : IDisposable
             // 采集处于空窗期（此前接入失败，例如设备未就绪/被拔）：排队重挂重试
             if (_capture == null)
             {
-                RequestReattach("采集未运行，尝试恢复");
+                RequestReattach(Strings.LogCaptureNotRunning);
                 return;
             }
 
             if (currentId != _deviceId)
             {
-                RequestReattach("默认设备已变化");
+                RequestReattach(Strings.ReasonDeviceChangedByPoll);
                 return;
             }
 
             // 设备没变但 8 秒没有数据 —— 说明采集静默失效（设备被拔、驱动异常等）
             var idle = Environment.TickCount64 - Volatile.Read(ref _lastDataTicks);
             if (idle > 8000)
-                RequestReattach($"采集已静默 {idle / 1000} 秒");
+                RequestReattach(Strings.LogCaptureSilent((int)(idle / 1000)));
         }
         finally { Monitor.Exit(_gate); }
     }
@@ -319,8 +319,8 @@ public sealed class SpeakerLoopback : IDisposable
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
         if (e.Exception != null)
-            _log($"系统声音采集中断：{e.Exception.Message}");
-        RequestReattach("采集已停止");
+            _log(Strings.LogCaptureInterrupted(e.Exception.Message));
+        RequestReattach(Strings.ReasonCaptureStopped);
     }
 
     private void OnData(object? sender, WaveInEventArgs e)
@@ -342,7 +342,7 @@ public sealed class SpeakerLoopback : IDisposable
             // 只记不抛：一次转换出错不应让采集线程永久停摆
             // （NAudio 会把异常转成 RecordingStopped，进而触发重挂，形成"一次抖动就断流"的连锁）
             _captureSamples.Clear();
-            _log($"音频格式转换失败：{ex.Message}");
+            _log(Strings.LogConvertFailed(ex.Message));
         }
     }
 
@@ -556,14 +556,14 @@ public sealed class SpeakerLoopback : IDisposable
         {
             // 只关心"多媒体"角色的输出设备变化（系统默认声音走的就是它）
             if (flow == DataFlow.Render && role == Role.Multimedia)
-                _owner.RequestReattach("系统默认输出设备改变");
+                _owner.RequestReattach(Strings.ReasonDeviceSwitched);
         }
 
         public void OnDeviceStateChanged(string deviceId, DeviceState newState)
         {
             // 只在"当前正在采的设备"被拔掉/禁用时动作
             if (_owner._deviceId == deviceId && newState != DeviceState.Active)
-                _owner.RequestReattach("当前采集设备失效");
+                _owner.RequestReattach(Strings.ReasonDeviceInvalid);
         }
 
         public void OnDeviceAdded(string pwstrDeviceId) { }
@@ -571,7 +571,7 @@ public sealed class SpeakerLoopback : IDisposable
         public void OnDeviceRemoved(string deviceId)
         {
             if (_owner._deviceId == deviceId)
-                _owner.RequestReattach("当前采集设备被移除");
+                _owner.RequestReattach(Strings.ReasonDeviceRemoved);
         }
 
         public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }

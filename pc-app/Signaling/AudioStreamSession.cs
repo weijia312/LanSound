@@ -62,11 +62,11 @@ public sealed class AudioStreamSession : IDisposable
     /// </para>
     /// </summary>
     private void OnAudioModeChanged(AudioMode mode)
-        => OnLog($"音频档位已切换为 {Describe(mode)}");
+        => OnLog(Strings.LogModeSwitched(Describe(mode)));
 
     private static string Describe(AudioMode mode) => mode == AudioMode.LowLatency
-        ? "低延迟（手机端抖动缓冲更小）"
-        : "高音质（缓冲给足，优先不断音）";
+        ? Strings.ModeDescLowLatency
+        : Strings.ModeDescHighQuality;
 
     /// <summary>环回凑满一帧（20ms 立体声）→ 转小端字节 → 直发手机。</summary>
     /// <remarks>
@@ -87,7 +87,7 @@ public sealed class AudioStreamSession : IDisposable
     private async Task SendSafeAsync(Func<byte[], Task> handler, byte[] bytes)
     {
         try { await handler(bytes); }
-        catch (Exception ex) { OnLog($"下行 PCM 发送失败：{ex.Message}"); }
+        catch (Exception ex) { OnLog(Strings.LogSendFailed(ex.Message)); }
     }
 
     public void Dispose()

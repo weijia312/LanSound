@@ -5,9 +5,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- 底色：未连接用 WinUI 默认窗口底色（#F3F3F3），已连接用深绿（#0F5C0C）。
-         RequestedTheme 锁死为 Light：两种底色都是浅色，必须配深色文字。
-         若跟随系统切到深色主题，文字会变白，在浅底上对比度只剩 3.5:1，不可读。 -->
-    <Grid x:Name="RootGrid" Background="Transparent" RequestedTheme="Light">
+         RequestedTheme 由代码按连接状态切换（浅底配深字、深绿底配浅字）。
+         界面文案一律不写在这里 —— 语言是运行时才确定的，全部由 Strings 在代码里设置。 -->
+    <Grid x:Name="RootGrid" Background="Transparent" RequestedTheme="Light" MinWidth="480" MinHeight="640">
         <Grid.Resources>
             <!-- 卡片叠加层用的 CardFillBrush / CardEdgeBrush 定义在 App.xaml 的
                  ThemeDictionaries 里（会随 RequestedTheme 自动翻转）：
@@ -24,7 +24,7 @@
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
-            <!-- 运行日志：等宽字体 -->
+            <!-- 运行日志：等宽字体，便于对齐时间戳 -->
             <Style x:Key="LogItemStyle" TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Courier New" />
                 <Setter Property="FontSize" Value="12" />
@@ -33,10 +33,7 @@
             </Style>
         </Grid.Resources>
 
-        <!-- 最小尺寸：内容（IP + 完整 URL、设置行、提示文案）在这个宽度以下会被裁，
-             故直接约束窗口，让用户拖小时也不会出现残缺布局。 -->
-        <Grid Margin="20,16,20,20" RowSpacing="12"
-              MinWidth="480" MinHeight="640">
+        <Grid Margin="20,16,20,20" RowSpacing="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -46,28 +43,26 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- 0. 状态 -->
-            <TextBlock x:Name="StatusText" Grid.Row="0" Text="正在启动信令服务…"
-                       FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            <!-- 0. 状态行（文案由 Strings 设置） -->
+            <TextBlock x:Name="StatusText" Grid.Row="0" FontSize="15" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
 
-            <!-- 1. 扫码卡片 -->
+            <!-- 1. 二维码 -->
             <Border Grid.Row="1" Style="{StaticResource CardStyle}" HorizontalAlignment="Center">
                 <StackPanel Spacing="12" HorizontalAlignment="Center">
-                    <TextBlock Text="扫码连接" Style="{StaticResource CardHeaderStyle}" />
+                    <TextBlock x:Name="QrHeader" Style="{StaticResource CardHeaderStyle}" />
                     <!-- 这层白底要保留：二维码黑块必须有足够静区才能被扫到，
                          透明或半透明底会让手机难以识别 -->
                     <Border Background="White" CornerRadius="6" Padding="8">
-                        <Image x:Name="QrImage" Width="168" Height="168"
-                               Stretch="Uniform" AutomationProperties.Name="配对二维码" />
+                        <Image x:Name="QrImage" Width="168" Height="168" Stretch="Uniform" />
                     </Border>
-                    <TextBlock Text="证书警告页点“继续访问”即可" FontSize="12" HorizontalAlignment="Center"
+                    <TextBlock x:Name="CertHintText" FontSize="12" HorizontalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
             </Border>
 
             <!-- 2. 访问地址：网卡 IP + 地址 + 端口。
-                 端口不另加「端口」标签 —— 它紧跟 URL 之后、又是纯数字框，
-                 标签属于冗余；去掉后地址行更紧凑。 -->
+                 端口不另加标签 —— 它紧跟 URL 之后、又是纯数字框，标签属于冗余。 -->
             <Grid Grid.Row="2" ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -75,35 +70,27 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <ComboBox x:Name="IpCombo" Grid.Column="0" MinWidth="132"
-                          SelectionChanged="IpCombo_SelectionChanged"
-                          AutomationProperties.Name="选择本机网卡 IP"
-                          ToolTipService.ToolTip="选择手机可达的本机网卡 IP（多网卡时请手动切换）" />
+                          SelectionChanged="IpCombo_SelectionChanged" />
                 <TextBox x:Name="UrlText" Grid.Column="1" IsReadOnly="True" VerticalAlignment="Center" />
                 <TextBox x:Name="PortText" Grid.Column="2" Width="66" VerticalAlignment="Center"
-                         InputScope="Number" MaxLength="5"
-                         AutomationProperties.Name="服务端口"
-                         ToolTipService.ToolTip="服务端口（1024-65535），改完自动生效。改端口后手机要重新扫码。" />
+                         InputScope="Number" MaxLength="5" />
             </Grid>
 
             <!-- 3. 设置：音质行横排，开机自启单独一行 -->
             <Border Grid.Row="3" Style="{StaticResource CardStyle}" Padding="12,12,12,12">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="设置" Style="{StaticResource CardHeaderStyle}" />
+                    <TextBlock x:Name="SettingsHeader" Style="{StaticResource CardHeaderStyle}" />
 
                     <!-- 3.1 音质：标签 + 两个单选项横排（圆点挨着哪个词就是哪个模式） -->
                     <StackPanel Spacing="6">
                         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                            <TextBlock Text="音质" FontSize="13" VerticalAlignment="Center" />
+                            <TextBlock x:Name="QualityLabel" FontSize="13" VerticalAlignment="Center" />
                             <RadioButton x:Name="ModeHighQuality" GroupName="AudioMode"
-                                         Content="高音质" MinWidth="0" VerticalAlignment="Center"
-                                         Checked="AudioMode_Checked"
-                                         AutomationProperties.Name="高音质模式"
-                                         ToolTipService.ToolTip="抖动缓冲 200ms，优先不断音、不丢采样" />
+                                         MinWidth="0" VerticalAlignment="Center"
+                                         Checked="AudioMode_Checked" />
                             <RadioButton x:Name="ModeLowLatency" GroupName="AudioMode"
-                                         Content="低延迟" MinWidth="0" VerticalAlignment="Center"
-                                         Checked="AudioMode_Checked"
-                                         AutomationProperties.Name="低延迟模式"
-                                         ToolTipService.ToolTip="抖动缓冲 60ms，响应更快，但网络一抖更易断续" />
+                                         MinWidth="0" VerticalAlignment="Center"
+                                         Checked="AudioMode_Checked" />
                         </StackPanel>
                         <TextBlock x:Name="AudioModeHint" FontSize="12" TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -111,21 +98,17 @@
 
                     <!-- 3.2 开机自启 -->
                     <StackPanel Spacing="4">
-                        <CheckBox x:Name="AutoStartCheck" Content="开机自动启动"
-                                  MinWidth="0" Checked="AutoStart_Toggled" Unchecked="AutoStart_Toggled"
-                                  AutomationProperties.Name="开机自动启动"
-                                  ToolTipService.ToolTip="登录 Windows 后自动运行，手机随时能连。不需要管理员权限。" />
+                        <CheckBox x:Name="AutoStartCheck" MinWidth="0"
+                                  Checked="AutoStart_Toggled" Unchecked="AutoStart_Toggled" />
                         <TextBlock x:Name="AutoStartHint" FontSize="12" TextWrapping="Wrap" Margin="4,0,0,0"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
 
-            <!-- 4. 使用提示（固定文案） -->
-            <!-- 固定文案的提示条：不需要名字，代码从不引用 -->
-            <InfoBar Grid.Row="4" IsOpen="True" IsClosable="False"
-                     Severity="Informational"
-                     Title="请允许防火墙放行；若手机网页加载过久，请重新开关 WiFi" />
+            <!-- 4. 使用提示（固定文案，内容与标题都由 Strings 设置） -->
+            <InfoBar x:Name="HintBar" Grid.Row="4" IsOpen="True" IsClosable="False"
+                     Severity="Informational" />
 
             <!-- 5. 运行日志 -->
             <Border Grid.Row="5" Style="{StaticResource CardStyle}" Padding="16,12,16,8">
@@ -134,7 +117,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="运行日志" Style="{StaticResource CardHeaderStyle}" />
+                    <TextBlock x:Name="LogHeader" Style="{StaticResource CardHeaderStyle}" />
                     <ListView x:Name="LogList" Grid.Row="1" SelectionMode="None"
                               Background="Transparent" BorderThickness="0" Padding="0"
                               ScrollViewer.HorizontalScrollMode="Disabled">
